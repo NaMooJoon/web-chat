@@ -1,3 +1,5 @@
 node_modules
 pacage-lock.json
 .DS_Store
+config
+config.json
