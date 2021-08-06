@@ -5,6 +5,7 @@ var app = express();
 var server = require('http').createServer(app);
 var io = require('socket.io').listen(server);
 var db = require('./utils/db');
+var moment = require('moment');
 
 var onlineUsers = {};                       // 현재 온라인인 유저를 저장하는 곳
 
@@ -27,18 +28,21 @@ server.listen(port, () => {
 io.sockets.on('connection', function(socket) {
     socket.on("send message", function(data) {
         // data -> roomId, msg
-        console.log('sending user:',getUserBySocketId(socket.id));
+        var userId = getUserBySocketId(socket.id);
+        console.log('sending user:', userId);
+        console.log('sending username:', onlineUsers[userId].username);
         var query = db.connection.query('INSERT INTO message (roomID,userID,message,time) VALUES(?,?,?,NOW())', 
-        [data.roomId, getUserBySocketId(socket.id), data.msg], function(err, rows){
+        [data.roomId, userId, data.msg], function(err, rows){
             if(err) throw err;
+
             io.sockets.in('room' + data.roomId).emit('new message', {
-                name: getUserBySocketId(socket.id),
+                username: onlineUsers[userId].username,
                 socketId: socket.id,
-                msg: data.msg
+                msg: data.msg,
+                time: moment().format('HH:mm')
             });
         });
     })
-
 
     socket.on('join user', function(data, cb) {
         var query = db.connection.query('SELECT * FROM user WHERE id=?', [data.id], function(err, rows){
@@ -46,7 +50,7 @@ io.sockets.on('connection', function(socket) {
                 cb({result : false, data : "이미 존재하는 회원입니다."});
                 return false;
             } else {
-                var query = db.connection.query('INSERT INTO user (id,pw,name) VALUES(?,?,?)', [data.id, data.pw,'test'], function(err, rows){
+                var query = db.connection.query('INSERT INTO user (id,pw,name) VALUES(?,?,?)', [data.id, data.pw, data.name], function(err, rows){
                     cb({result : true, data : "회원가입에 성공하였습니다."});
                 });
             }
@@ -57,10 +61,13 @@ io.sockets.on('connection', function(socket) {
         var query = db.connection.query('SELECT * FROM user WHERE id=?', [data.id], function(err, rows){
             if(rows.length) {
                 if(rows[0].pw === data.pw){
-                    onlineUsers[data.id] = {roomId: 1, socketId: socket.id, userId: data.id};
+                    onlineUsers[data.id] = {roomId: 1, socketId: socket.id, userId: data.id, username: rows[0].name};
                     socket.join('room1');
-                    cb({result: true, data: '로그인에 성공하였습니다.'});
-                    updateUserList(0, 1, data.id);
+                    cb({result: true, data: '로그인에 성공하였습니다.', username: rows[0].name});
+                    var query = db.connection.query('SELECT userID,name,message,time FROM message LEFT JOIN user ON message.userID=user.id WHERE roomID=?', [onlineUsers[data.id].roomId], function(err, data){
+                        socket.emit('message history', data);
+                        updateUserList(0, 1, data.id);
+                    });
                 } else {
                     cb({result: false, data: '비밀번호가 틀렸습니다.'});
                     return false;
@@ -80,11 +87,11 @@ io.sockets.on('connection', function(socket) {
         socket.leave('room' + prevRoomId);
         socket.join('room' + nextRoomId);
         onlineUsers[id].roomId = data.roomId;
-        var query = db.connection.query('SELECT * FROM message WHERE roomID=?', [data.roomId], function(err, rows){
-            socket.emit('message history', rows);
+        var query = db.connection.query('SELECT userID,name,message,time FROM message LEFT JOIN user ON message.userID=user.id WHERE roomID=?', [data.roomId], function(err, data){
+            socket.emit('message history', data);
+            updateUserList(prevRoomId, nextRoomId, id);
         });
-        updateUserList(prevRoomId, nextRoomId, id);
-    })
+    });
 
     socket.on('logout', function() {
         if(!socket.id) return;
@@ -108,11 +115,11 @@ io.sockets.on('connection', function(socket) {
     function updateUserList(prev, next, id) {
         if(prev !== 0) {
             io.sockets.in('room' + prev).emit('userlist', getUsersByRoomId(prev));
-            io.sockets.in('room' + prev).emit('lefted room', id);
+            io.sockets.in('room' + prev).emit('lefted room', onlineUsers[id].username);
         }
         if(next !== 0) {
             io.sockets.in('room' + next).emit('userlist', getUsersByRoomId(next));
-            io.sockets.in('room' + next).emit('joined room', id);
+            io.sockets.in('room' + next).emit('joined room', onlineUsers[id].username);
         }
     }
 
@@ -122,7 +129,7 @@ io.sockets.on('connection', function(socket) {
             if(onlineUsers[el].roomId === roomId) {
                 userstemp.push({
                     socketId : onlineUsers[el].socketId,
-                    name : el
+                    name : onlineUsers[el].username
                 });
             }
         });

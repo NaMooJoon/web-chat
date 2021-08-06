@@ -7,7 +7,8 @@ const connection = mysql.createConnection({
     user: option.storageConfig.username,
     password: option.storageConfig.password,
     database: option.storageConfig.database,
-    host: option.storageConfig.host
+    host: option.storageConfig.host,
+    dateStrings:'date'
 })
 connection.connect();
 

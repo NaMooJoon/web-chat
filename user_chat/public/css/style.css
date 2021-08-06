@@ -175,6 +175,11 @@ nav{
 
 }
 
+.msgTime {
+    color: rgb(150, 148, 148);
+    font-size: 13px;
+}
+
 .anotherMsg > .msg {
     background-color: #f1f0f0;
 

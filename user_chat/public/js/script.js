@@ -2,6 +2,7 @@ $(function () {
     var socket = io.connect();
     var roomId = 1;
     var socketId = "";
+    var username = "";
     var $userWrap = $('#userWrap');
     var $contentWrap = $('#contentWrap');
     var $loginForm = $('#loginForm');
@@ -35,6 +36,7 @@ $(function () {
                 if(res.result) {
                     alert(res.data);
                     socketId = socket.id;
+                    username = res.username;
                     roomId = 1;
                     id.val("");
                     pw.val("");
@@ -56,11 +58,12 @@ $(function () {
         e.preventDefault();
         let id = $("#joinId");
         let pw = $("#joinPw");
-        if (id.val() === "" || pw.val() === "") {
+        let name = $("#name");
+        if (id.val() === "" || pw.val() === "" || name.val() === "") {
             alert("check validation");
             return false;
         } else {
-            socket.emit('join user', {id: id.val(), pw: pw.val()}, function (res) {
+            socket.emit('join user', {id: id.val(), pw: pw.val(), name: name.val()}, function (res) {
                 if (res.result) {
                     alert(res.data);
                     id.val("");
@@ -78,7 +81,8 @@ $(function () {
     $("#logoutBtn").click(function(e) {
         e.preventDefault();
         socket.emit('logout');
-        socketId = "";
+        username = "";
+        username = "";
         alert('로그아웃되었습니다.');
         $("#userWrap").show();
         $("#contentWrap").hide();
@@ -114,19 +118,34 @@ $(function () {
     })
 
     socket.on('new message', function(data) {
-        if(data.socketId === socketId) {
-            $chatLog.append(`<div class="myMsg msgEl"><span class="msg">${data.msg}</span></div>`)
+        console.log('data.username: ', data.username);
+        console.log('username     :', username);
+        if(data.username === username) {
+            $chatLog.append(`<div class="myMsg msgEl"><span class='msgTime'>${data.time}   </span><span class="msg">${data.msg}</span></div>`)
         } else {
-            $chatLog.append(`<div class="anotherMsg msgEl"><span class="anotherName">${data.name}</span><span class="msg">${data.msg}</span></div>`)
+            $chatLog.append(`<div class="anotherMsg msgEl"><span class="anotherName">${data.username}</span><span class="msg">${data.msg}</span><span class='msgTime'>  ${data.time}</span></div>`)
         }
         $chatLog.scrollTop($chatLog[0].scrollHeight - $chatLog[0].clientHeight);
     });
 
 
     socket.on('message history', function(data) {
+        console.log(data);
         var i;
+        var date = data[0].time.substring(8,11);
+        $chatLog.append(`<div class="notice"><strong>----- ${data[0].time.substring(0,11)} -----</div>`);
         for(i = 0; i < data.length; i++) {
-            $chatLog.append(`<div class="anotherMsg msgEl"><span class="anotherName">${data.name}</span><span class="msg">${data.msg}</span></div>`)
+            if(date !== data[i].time.substring(8,11)){
+                $chatLog.append(`<div class="notice"><strong>----- ${data[i].time.substring(0,11)} -----</div>`);
+                date = data[i].time.substring(8,11);
+            }
+
+            data[i].time = data[i].time.substring(11,16);
+            if(data[i].name === username) {
+                $chatLog.append(`<div class="myMsg msgEl"><span class='msgTime'>${data[i].time}   </span><span class="msg">${data[i].message}</span></div>`)
+            } else {
+                $chatLog.append(`<div class="anotherMsg msgEl"><span class="anotherName">${data[i].name}</span><span class="msg">${data[i].message}</span><span class='msgTime'>  ${data[i].time}</span></div>`)
+            }
         }
         $chatLog.scrollTop($chatLog[0].scrollHeight - $chatLog[0].clientHeight);
     });
